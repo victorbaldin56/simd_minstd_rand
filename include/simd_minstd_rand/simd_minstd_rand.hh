@@ -58,7 +58,7 @@ class uniform_distribution {
   uniform_distribution(float min, float max) noexcept : min_{min}, max_{max} {}
 
   template <typename Rand>
-  auto operator()(Rand&& rng) const noexcept {
+  auto operator()(Rand& rng) const noexcept {
     __m512 rand_floats = _mm512_cvtepi32_ps(rng());
     rand_floats /= _mm512_set1_ps(
         static_cast<float>(std::numeric_limits<std::int32_t>::max()));

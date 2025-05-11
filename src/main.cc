@@ -38,7 +38,6 @@ void benchmark(Func f, std::size_t npoints, const std::string& label) {
 }
 
 float monteCarloPiNaive(std::size_t npoints) {
-  std::uniform_real_distribution<float> dist{-1.f, 1.f};
   std::size_t count_inside = 0;
 
 #pragma omp parallel reduction(+ : count_inside)
@@ -46,6 +45,7 @@ float monteCarloPiNaive(std::size_t npoints) {
     int tid = omp_get_thread_num();
     std::uint32_t seed = 12345 + tid * 7919;
     std::minstd_rand rng{seed};
+    std::uniform_real_distribution<float> dist{-1.f, 1.f};
 
 #pragma omp for
     for (std::size_t i = 0; i < npoints; ++i) {
@@ -60,8 +60,6 @@ float monteCarloPiNaive(std::size_t npoints) {
 
 float monteCarloPiSimd(std::size_t npoints) {
   assert((npoints & 0xf) == 0);
-
-  simd_random::uniform_distribution dist{-1.f, 1.f};
   std::size_t count_inside = 0;
 
 #pragma omp parallel reduction(+ : count_inside)
@@ -69,6 +67,7 @@ float monteCarloPiSimd(std::size_t npoints) {
     int tid = omp_get_thread_num();
     std::uint32_t seed = 12345 + tid * 7919;
     simd_random::minstd_rand rng{seed};
+    simd_random::uniform_distribution dist{-1.f, 1.f};
 
 #pragma omp for
     for (std::size_t i = 0; i < npoints; i += 16) {
