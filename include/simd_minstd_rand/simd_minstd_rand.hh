@@ -55,8 +55,7 @@ class minstd_rand final {
 
 class uniform_distribution {
  public:
-  constexpr uniform_distribution(float min, float max) noexcept
-      : min_{min}, max_{max} {}
+  uniform_distribution(float min, float max) noexcept : min_{min}, max_{max} {}
 
   template <typename Rand>
   auto operator()(Rand&& rng) const noexcept {
