@@ -1,0 +1,11 @@
+{
+    "version": "0.5",
+    "requires": [
+        "llvm-openmp/18.1.8#5e371038846bf9a660dc7746beb21e04%1719923677.897"
+    ],
+    "build_requires": [
+        "cmake/3.31.6#ed0e6c1d49bd564ce6fed1a19653b86d%1740594968.467"
+    ],
+    "python_requires": [],
+    "config_requires": []
+}
