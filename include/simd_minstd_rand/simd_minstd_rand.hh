@@ -19,7 +19,8 @@ class minstd_rand final {
 
   auto operator()() noexcept {
     auto vec_mask = _mm512_set1_epi32(0x7fffffff);
-    auto vec_multiplier = _mm512_set1_epi32(1098894339);
+    auto vec_multiplier =
+        _mm512_set1_epi32(1098894339);  // A_16 = 48271**16 % 0x7fffffff
     auto lo = _mm512_mullo_epi32(state_, vec_multiplier);
     auto a_even = _mm512_cvtepu32_epi64(_mm512_castsi512_si256(state_));
     auto b_even = _mm512_cvtepu32_epi64(_mm512_castsi512_si256(vec_multiplier));
