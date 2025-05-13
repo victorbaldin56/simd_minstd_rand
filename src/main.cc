@@ -4,7 +4,6 @@
 #include <cstdlib>
 #include <iostream>
 #include <random>
-#include <vector>
 
 #include "omp.h"
 #include "ompx.h"
@@ -12,7 +11,7 @@
 
 namespace {
 
-constexpr std::size_t kNumPoints = 100000000;
+constexpr std::size_t kNumPoints = 10000000000;
 
 template <typename Func>
 void benchmark(Func f, std::size_t npoints, const std::string& label) {
@@ -57,14 +56,13 @@ inline auto convert(__m512i vals, float min, float max) noexcept {
   return fvals;
 }
 
-float monteCarloPiNaive(std::size_t npoints) {
+float monteCarloPiScalar(std::size_t npoints) {
   std::size_t count_inside = 0;
 
 #pragma omp parallel reduction(+ : count_inside)
   {
     std::uint32_t tid = omp_get_thread_num();
     std::minstd_rand rng{tid};
-    std::uniform_real_distribution<float> dist{-1.f, 1.f};
 
 #pragma omp for
     for (std::size_t i = 0; i < npoints; ++i) {
@@ -101,13 +99,13 @@ float monteCarloPiSimd(std::size_t npoints) {
 }  // namespace
 
 int main() {
-  auto res_naive = monteCarloPiNaive(kNumPoints);
+  auto res_naive = monteCarloPiScalar(kNumPoints);
   auto res_vec = monteCarloPiSimd(kNumPoints);
   std::cout << "std::minstd_rand: " << res_naive << std::endl;
   std::cout << "simd_random::minstd_rand: " << res_vec << std::endl;
   std::cout << "M_PI: " << M_PI << std::endl;
 
-  benchmark(monteCarloPiNaive, kNumPoints, "std::minstd_rand");
+  benchmark(monteCarloPiScalar, kNumPoints, "std::minstd_rand");
   benchmark(monteCarloPiSimd, kNumPoints, "simd_random::minstd_rand");
 
   return 0;
