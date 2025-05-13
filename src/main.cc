@@ -21,7 +21,9 @@ void benchmark(Func f, std::size_t npoints, const std::string& label) {
 
   volatile float result_sink;
 
-  for (int i = 0; i < kWarmups; ++i) result_sink = f(npoints);
+  for (int i = 0; i < kWarmups; ++i) {
+    result_sink = f(npoints);
+  }
 
   std::uint64_t total_cycles = 0;
   for (int i = 0; i < kIters; ++i) {
@@ -37,20 +39,37 @@ void benchmark(Func f, std::size_t npoints, const std::string& label) {
             << '\n';
 }
 
+constexpr auto convert(std::uint32_t val, float min, float max) noexcept {
+  auto fval = static_cast<float>(val);
+  fval /= static_cast<float>(std::numeric_limits<std::int32_t>::max());
+  auto range = max - min;
+  fval = std::fma(fval, range, min);
+  return fval;
+}
+
+inline auto convert(__m512i vals, float min, float max) noexcept {
+  auto fvals = _mm512_cvtepi32_ps(vals);
+  fvals /= _mm512_set1_ps(
+      static_cast<float>(std::numeric_limits<std::int32_t>::max()));
+  auto range = _mm512_set1_ps(max - min);
+  auto offset = _mm512_set1_ps(min);
+  fvals = _mm512_fmadd_ps(fvals, range, offset);
+  return fvals;
+}
+
 float monteCarloPiNaive(std::size_t npoints) {
   std::size_t count_inside = 0;
 
 #pragma omp parallel reduction(+ : count_inside)
   {
-    int tid = omp_get_thread_num();
-    std::uint32_t seed = 12345 + tid * 7919;
-    std::minstd_rand rng{seed};
+    std::uint32_t tid = omp_get_thread_num();
+    std::minstd_rand rng{tid};
     std::uniform_real_distribution<float> dist{-1.f, 1.f};
 
 #pragma omp for
     for (std::size_t i = 0; i < npoints; ++i) {
-      auto x = dist(rng);
-      auto y = dist(rng);
+      auto x = convert(rng(), -1.f, 1.f);
+      auto y = convert(rng(), -1.f, 1.f);
       count_inside += (x * x + y * y <= 1.f);
     }
   }
@@ -64,15 +83,13 @@ float monteCarloPiSimd(std::size_t npoints) {
 
 #pragma omp parallel reduction(+ : count_inside)
   {
-    int tid = omp_get_thread_num();
-    std::uint32_t seed = 12345 + tid * 7919;
-    simd_random::minstd_rand rng{seed};
-    simd_random::uniform_distribution dist{-1.f, 1.f};
+    std::uint32_t tid = omp_get_thread_num();
+    simd_random::minstd_rand rng{tid};
 
 #pragma omp for
     for (std::size_t i = 0; i < npoints; i += 16) {
-      auto vec_x = dist(rng);
-      auto vec_y = dist(rng);
+      auto vec_x = convert(rng(), -1.f, 1.f);
+      auto vec_y = convert(rng(), -1.f, 1.f);
       auto cmp_mask = _mm512_cmp_ps_mask(vec_x * vec_x + vec_y * vec_y,
                                          _mm512_set1_ps(1.f), _CMP_LE_OS);
       count_inside += _mm_popcnt_u32(cmp_mask);

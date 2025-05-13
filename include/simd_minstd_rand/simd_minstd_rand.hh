@@ -15,61 +15,67 @@ namespace simd_random {
 
 class minstd_rand final {
  public:
-  minstd_rand(std::uint32_t seed) noexcept : state_(_mm512_set1_epi32(seed)) {}
+  explicit minstd_rand(std::uint32_t seed) noexcept : state_(initState(seed)) {}
 
   auto operator()() noexcept {
-    auto vec_mask = _mm512_set1_epi32(0x7fffffff);
-    auto vec_multiplier =
-        _mm512_set1_epi32(1098894339);  // A_16 = 48271**16 % 0x7fffffff
-    auto lo = _mm512_mullo_epi32(state_, vec_multiplier);
-    auto a_even = _mm512_cvtepu32_epi64(_mm512_castsi512_si256(state_));
-    auto b_even = _mm512_cvtepu32_epi64(_mm512_castsi512_si256(vec_multiplier));
-    auto a_odd = _mm512_cvtepu32_epi64(_mm512_extracti64x4_epi64(state_, 1));
-    auto b_odd =
-        _mm512_cvtepu32_epi64(_mm512_extracti64x4_epi64(vec_multiplier, 1));
-    auto prod_even = _mm512_mul_epu32(a_even, b_even);
-    auto prod_odd = _mm512_mul_epu32(a_odd, b_odd);
-    auto hi_even = _mm512_srli_epi64(prod_even, 32);
-    auto hi_odd = _mm512_srli_epi64(prod_odd, 32);
-    auto hi = _mm512_mask_blend_epi32(
-        0xaaaa, _mm512_zextsi256_si512(_mm512_cvtepi64_epi32(hi_even)),
-        _mm512_zextsi256_si512(_mm512_cvtepi64_epi32(hi_odd)));
+    // split state into two 256-bit chunks for 64-bit processing
+    const auto state_low = _mm512_extracti32x8_epi32(state_, 0);
+    const auto state_high = _mm512_extracti32x8_epi32(state_, 1);
 
-    auto x0 = _mm512_and_epi32(lo, vec_mask);
-    auto temp =
-        _mm512_or_epi32(_mm512_srli_epi32(lo, 31), _mm512_slli_epi32(hi, 1));
-    auto x1 = _mm512_and_epi32(temp, vec_mask);
-    auto x2 = _mm512_srli_epi32(hi, 30);
-    auto sum = _mm512_add_epi32(x0, x1);
-    sum = _mm512_add_epi32(sum, x2);
+    // convert to 64 bit for multiplication
+    const auto state_low_64 = _mm512_cvtepu32_epi64(state_low);
+    const auto state_high_64 = _mm512_cvtepu32_epi64(state_high);
+    const auto a_64 = _mm512_set1_epi64(kMultiplier);
+    auto product_low = _mm512_mul_epu32(state_low_64, a_64);
+    auto product_high = _mm512_mul_epu32(state_high_64, a_64);
 
-    auto overflow = _mm512_cmpge_epu32_mask(sum, vec_mask);
-    state_ = _mm512_mask_sub_epi32(sum, overflow, sum, vec_mask);
+    // compute modulus using optimized method for 2^31-1
+    const auto m_64 = _mm512_set1_epi64(kModulus);
+    auto compute_mod = [m_64](__m512i product) {
+      const auto hi = _mm512_srli_epi64(product, 31);
+      const auto lo = _mm512_and_epi64(product, m_64);
+      auto sum = _mm512_add_epi64(hi, lo);
 
+      const auto ge_mask = _mm512_cmp_epu64_mask(sum, m_64, _MM_CMPINT_GE);
+      return _mm512_mask_sub_epi64(sum, ge_mask, sum, m_64);
+    };
+
+    // apply modulus to both halves
+    const auto res_low = compute_mod(product_low);
+    const auto res_high = compute_mod(product_high);
+
+    // convert back to 32-bit and combine results
+    const auto new_low = _mm512_cvtepi64_epi32(res_low);
+    const auto new_high = _mm512_cvtepi64_epi32(res_high);
+
+    state_ = _mm512_inserti32x8(_mm512_castsi256_si512(new_low), new_high, 1);
     return state_;
+  }
+
+  static constexpr std::uint32_t kMultiplier = 48271;
+  static constexpr std::uint32_t kModulus = 0x7fffffff;
+
+ private:
+  static __m512i initState(std::uint32_t seed) noexcept {
+    const auto indices =
+        _mm512_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+    auto seeds = _mm512_add_epi32(_mm512_set1_epi32(seed), indices);
+    const auto m_vec = _mm512_set1_epi32(kModulus);
+    auto lo = _mm512_and_epi32(seeds, m_vec);
+    auto hi = _mm512_srli_epi32(seeds, 31);
+    auto mod = _mm512_add_epi32(lo, hi);
+
+    // handle potential overflow in modulus calculation
+    const auto ge_mask = _mm512_cmp_epu32_mask(mod, m_vec, _MM_CMPINT_GE);
+    mod = _mm512_mask_sub_epi32(mod, ge_mask, mod, m_vec);
+
+    // remove zeroes
+    const auto zero_mask = _mm512_cmpeq_epi32_mask(mod, _mm512_setzero_epi32());
+    return _mm512_mask_add_epi32(mod, zero_mask, mod, _mm512_set1_epi32(1));
   }
 
  private:
   __m512i state_;
 };
 
-class uniform_distribution {
- public:
-  uniform_distribution(float min, float max) noexcept : min_{min}, max_{max} {}
-
-  template <typename Rand>
-  auto operator()(Rand& rng) const noexcept {
-    __m512 rand_floats = _mm512_cvtepi32_ps(rng());
-    rand_floats /= _mm512_set1_ps(
-        static_cast<float>(std::numeric_limits<std::int32_t>::max()));
-
-    auto range = _mm512_set1_ps(max_ - min_);
-    auto offset = _mm512_set1_ps(min_);
-    rand_floats = _mm512_fmadd_ps(rand_floats, range, offset);
-    return rand_floats;
-  }
-
- private:
-  float min_, max_;
-};
 }  // namespace simd_random
