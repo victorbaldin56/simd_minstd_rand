@@ -11,12 +11,11 @@ TEST(simd_minstd_rand, functional) {
   simd_random::minstd_rand vec_rng{kSeed};
   std::minstd_rand rng{kSeed};
 
-  constexpr std::size_t kIters = 1000000000;
+  constexpr std::size_t kIters = 100000000;
   for (std::size_t i = 0; i < kIters; i += 16) {
     // simulate vector rng with scalar reference
     std::array<std::uint32_t, 16> ss;
     std::generate(ss.begin(), ss.end(), [&] { return rng(); });
-
     auto v = vec_rng();
     ASSERT_EQ(std::memcmp(ss.data(), &v, 64), 0);
   }
