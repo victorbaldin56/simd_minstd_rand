@@ -1,6 +1,9 @@
 [requires]
 llvm-openmp/18.1.8
 
+[test_requires]
+gtest/1.16.0
+
 [generators]
 CMakeDeps
 CMakeToolchain

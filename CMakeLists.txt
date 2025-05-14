@@ -9,3 +9,10 @@ target_compile_options(simd_rng INTERFACE "-march=native")
 
 add_executable(pi src/main.cc)
 target_link_libraries(pi simd_rng llvm-openmp::llvm-openmp)
+
+option(ENABLE_TESTS "Enable testing" ON)
+if (${ENABLE_TESTS})
+  find_package(GTest REQUIRED)
+  include(GoogleTest)
+  add_subdirectory(test)
+endif()
