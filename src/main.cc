@@ -11,7 +11,7 @@
 
 namespace {
 
-constexpr std::size_t kNumPoints = 10000000000;
+constexpr std::size_t kNumPoints = 1000000000;
 
 template <typename Func>
 void benchmark(Func f, std::size_t npoints, const std::string& label) {
